@@ -25,10 +25,11 @@ description: Load before processing or evaluating any refund, credit, or billing
 2. Identify the invoice in question. Confirm the charge amount.
 3. Determine which policy row applies.
 4. Verify the refund amount does not exceed the invoice charge.
-5. If eligible and ≤$500: issue the refund using `issue_refund`.
-6. If eligible but >$500: issue the refund — the system will automatically pause for human approval.
-7. If not eligible: explain why, offer to escalate.
-8. Always leave an account note documenting the refund or denial.
+5. **If eligible: Always call `issue_refund`** — the tool handles approval automatically:
+   - ≤$500: Completes immediately. Tell the customer it's done.
+   - >$500: Before calling the tool, tell the customer you're submitting their refund and it will be **"pending review"** or **"awaiting approval"** from our team. Then call `issue_refund` (it will pause for human approval).
+6. If not eligible: explain why, offer to escalate.
+7. Always leave an account note documenting the refund or denial.
 
 ## Honesty rule
 
