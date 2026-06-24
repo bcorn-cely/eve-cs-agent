@@ -8,13 +8,13 @@ export default defineTool({
     "Leave a timestamped note on a customer's account so the next session or a human teammate has context.",
   inputSchema: z.object({
     customerId: z.string().describe("The customer ID"),
-    note: z.string().describe("The note content"),
+    content: z.string().describe("The note content"),
   }),
-  async execute({ customerId, note }) {
+  async execute({ customerId, content }) {
     try {
       const created = await apiFetch<AccountNote>(
         `/api/customers/${encodeURIComponent(customerId)}/notes`,
-        { method: "POST", body: JSON.stringify({ note }) },
+        { method: "POST", body: JSON.stringify({ note: content }) },
       );
       return {
         success: true,
