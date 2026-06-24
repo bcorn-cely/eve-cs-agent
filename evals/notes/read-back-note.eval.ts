@@ -8,10 +8,16 @@ export default defineEval({
     await t.send(
       "I'm priya@cloudnine.dev. Please add a note to my account saying: Customer requested annual billing quote.",
     );
-    t.calledTool("add_account_note");
+    t.calledTool("lookup_customer", {
+      input: { email: "priya@cloudnine.dev" },
+    });
+    t.calledTool("add_account_note", {
+      input: { content: /annual billing/ },
+    });
 
     await t.send("What notes are on my account?");
     t.completed();
+    t.calledTool("get_account_notes");
     t.check(t.reply, includes("annual billing"));
   },
 });

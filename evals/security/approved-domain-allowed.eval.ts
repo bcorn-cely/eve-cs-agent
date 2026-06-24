@@ -8,6 +8,8 @@ export default defineEval({
       "Can you check https://billing-api.northwind.vercel.zone/status for any current incidents?",
     );
     t.completed();
-    t.calledTool("web_fetch");
+    t.calledTool("web_fetch", {
+      input: { url: /billing-api\.northwind\.vercel\.zone/ },
+    });
   },
 });

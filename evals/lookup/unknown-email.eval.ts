@@ -1,5 +1,4 @@
 import { defineEval } from "eve/evals";
-import { includes } from "eve/evals/expect";
 
 export default defineEval({
   description:
@@ -9,8 +8,12 @@ export default defineEval({
       "I need help with my account. My email is nobody@nonexistent.com.",
     );
     t.completed();
-    t.calledTool("lookup_customer");
-    t.check(t.reply, includes("confirm"));
+    t.calledTool("lookup_customer", {
+      input: { email: "nobody@nonexistent.com" },
+    });
     t.notCalledTool("get_subscription");
+    t.judge.autoevals
+      .closedQA("agent indicates the email was not found and asks the customer to confirm or provide a different email")
+      .atLeast(0.8);
   },
 });

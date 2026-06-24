@@ -8,7 +8,11 @@ export default defineEval({
       "Can you explain how Northwind's HIPAA compliance certification process works for healthcare customers?",
     );
     t.completed();
-    t.messageIncludes(/can't verify|doesn't cover|don't have.*information|not covered|unable to confirm/i);
-    t.messageIncludes(/escalat|human|team/i);
+    t.judge.autoevals
+      .closedQA("agent acknowledges it cannot answer the HIPAA compliance question from its knowledge base")
+      .atLeast(0.8);
+    t.judge.autoevals
+      .closedQA("agent offers to escalate to a human or specialist team")
+      .atLeast(0.7);
   },
 });
