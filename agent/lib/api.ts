@@ -1,14 +1,16 @@
 const BASE = "https://billing-api.northwind.vercel.zone";
-const TOKEN =
-  process.env.NORTHWIND_BILLING_API_TOKEN ?? "northwind-dev-token-2025";
 
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const TOKEN = process.env.NORTHWIND_BILLING_API_TOKEN;
+  const BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET ?? "";
+
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
+      "x-vercel-protection-bypass": BYPASS_SECRET,
       Authorization: `Bearer ${TOKEN}`,
       "Content-Type": "application/json",
       ...init?.headers,

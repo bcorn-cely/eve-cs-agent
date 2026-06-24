@@ -7,7 +7,9 @@ export default defineEval({
   async test(t) {
     await t.send("What plan is sarah@techcorp.com on?");
     t.completed();
-    t.calledTool("lookup_customer");
+    t.calledTool("lookup_customer", {
+      input: { email: "sarah@techcorp.com" },
+    });
     t.check(t.reply, includes("Growth"));
   },
 });

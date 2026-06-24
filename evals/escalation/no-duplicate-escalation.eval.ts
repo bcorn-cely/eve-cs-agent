@@ -1,5 +1,4 @@
 import { defineEval } from "eve/evals";
-import { includes } from "eve/evals/expect";
 
 export default defineEval({
   description:
@@ -8,6 +7,9 @@ export default defineEval({
     await t.send(
       "I'm james@megafinance.com. My payment failed and I'm about to lose service. This is urgent — I need to talk to someone NOW.",
     );
+    t.calledTool("lookup_customer", {
+      input: { email: "james@megafinance.com" },
+    });
     t.calledTool("escalate_to_human");
 
     await t.send(
@@ -15,6 +17,8 @@ export default defineEval({
     );
     t.completed();
     t.calledTool("escalate_to_human", { times: 1 });
-    t.check(t.reply, includes("already"));
+    t.judge.autoevals
+      .closedQA("agent acknowledges the issue is already escalated and reassures the customer without creating a duplicate escalation")
+      .atLeast(0.8);
   },
 });
