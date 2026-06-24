@@ -22,14 +22,10 @@ This sample agent handles customer support tasks for a fictional company (Northw
 
 ## What This Doesn't Cover
 
-This is a simplified sample for educational purposes. It does not include:
+This is a simplified sample for educational purposes.
 
-- Every Eve feature or configuration option
-- Production-grade error handling and retry logic
-- Real authentication or secrets management
-- Comprehensive edge case handling
 
-For production agents, refer to the full Eve documentation.
+For even more robust agents and Eve capabilities, refer to the full Eve documentation.
 
 ## Getting Started
 
