@@ -15,19 +15,21 @@ This agent handles Tier-1 and Tier-2 support for Northwind, a fictional SaaS bil
 
 ## Eve Primitives Demonstrated
 
-Eve discovers capabilities from the filesystem. This project uses every major primitive:
+Eve discovers capabilities from the filesystem. Each folder under `agent/` is a slot that adds a capability:
 
-| Primitive | This Project | What It Does |
-|-----------|--------------|--------------|
-| **Instructions** | `agent/instructions.md` | The always-on system prompt that defines who the agent is and how it behaves |
-| **Tools** | `agent/tools/*.ts` | Typed functions the model can call — customer lookup, refunds, notes, escalation |
-| **Skills** | `agent/skills/*/SKILL.md` | On-demand procedures loaded only when relevant (refund policy, troubleshooting guides) |
-| **Connections** | `agent/connections/*.ts` | External API integrations — here, an OpenAPI connection to the billing API |
-| **Sandbox** | `agent/sandbox/sandbox.ts` | Network policy controlling what URLs the agent can access |
-| **Hooks** | `agent/hooks/*.ts` | Lifecycle subscribers for audit logging and observability |
-| **Schedules** | `agent/schedules/*.ts` | Cron-triggered tasks — a daily escalation digest |
-| **Subagents** | `agent/subagents/*/` | Specialist child agents — a billing investigator for complex inquiries |
-| **Evals** | `evals/*.eval.ts` | Test suite asserting on tool calls, responses, and agent behavior |
+| Primitive | What Eve Does | Docs |
+|-----------|---------------|------|
+| **Instructions** | Always-on system prompt that shapes agent behavior | `instructions.mdx` |
+| **Tools** | Typed functions the model can call, with optional human approval gates | `tools/overview.mdx` |
+| **Skills** | On-demand procedures loaded only when relevant — keeps context lean | `skills.mdx` |
+| **Connections** | Expose external APIs (MCP or OpenAPI) as tools the model can call | `connections.mdx` |
+| **Sandbox** | Isolated bash environment with network policy and credential brokering | `sandbox.mdx` |
+| **Hooks** | Lifecycle subscribers that react to stream events (audit, metrics, alerting) | `guides/hooks.md` |
+| **Schedules** | Cron-triggered tasks that run the agent on a cadence | `schedules.mdx` |
+| **Subagents** | Specialist child agents with their own instructions and sandbox | `subagents.mdx` |
+| **Evals** | Scored checks that assert on tool calls, responses, and behavior | `evals/overview.mdx` |
+
+Docs are at `node_modules/eve/docs/` after install. See `reference/project-layout.md` for the full slot table.
 
 ## Getting Started
 
@@ -61,43 +63,42 @@ eve-cs-agent/
 
 ### Human-in-the-Loop Approval
 
-The `issue_refund` tool uses Eve's `needsApproval` to pause execution for amounts over $500:
+Tools can require human sign-off before executing. Eve's `needsApproval` pauses the session durably until approved:
 
 ```typescript
 needsApproval: ({ toolInput }) => (toolInput?.amount ?? 0) > 500
 ```
 
-The agent communicates "pending review" to the customer and the session parks until a human approves.
+See `tools/human-in-the-loop.mdx`.
+
+### Credential Brokering
+
+The sandbox's network policy can inject credentials at the firewall level — the agent never sees the token:
+
+```typescript
+networkPolicy: {
+  allow: {
+    "api.example.com": [{
+      transform: [{ headers: { authorization: `Bearer ${TOKEN}` } }]
+    }]
+  }
+}
+```
+
+See `sandbox.mdx` under "Credential brokering".
 
 ### Skills as Progressive Disclosure
 
-Skills keep the context window lean. The refund policy isn't loaded on every turn — only when the agent calls `load_skill("refund-policy")` for a billing issue.
+Skills are loaded on-demand via `load_skill()`, keeping the context window lean. The model sees skill descriptions and loads the full procedure only when relevant.
 
 ### Subagent Delegation
 
-Complex billing analysis delegates to the `billing_investigator` subagent, which has its own instructions and tools. The parent stays in control of customer communication and money movement.
+Subagents are specialist child agents with their own instructions, tools, and sandbox. The parent delegates focused subtasks; the child reports back.
 
-### Eval-Driven Development
+### Evals
 
-The `evals/` folder contains assertions for security (blocked URLs), refund workflows (approval gates), and response quality. Run them with:
+Scored checks that drive the agent through real sessions and assert on behavior:
 
 ```bash
 npx eve eval
 ```
-
-## Documentation Reference
-
-After `npm install`, the full Eve documentation is at `node_modules/eve/docs/`. Key files mapped to what this project demonstrates:
-
-| This Project | Eve Docs |
-|--------------|----------|
-| `agent/instructions.md` | `instructions.mdx` |
-| `agent/tools/*.ts` | `tools/overview.mdx`, `tools/human-in-the-loop.mdx` |
-| `agent/skills/*/SKILL.md` | `skills.mdx` |
-| `agent/connections/*.ts` | `connections.mdx` |
-| `agent/sandbox/sandbox.ts` | `sandbox.mdx` |
-| `agent/hooks/*.ts` | `guides/hooks.md` |
-| `agent/schedules/*.ts` | `schedules.mdx` |
-| `agent/subagents/*/` | `subagents.mdx` |
-| `evals/*.eval.ts` | `evals/overview.mdx` |
-| Overall structure | `reference/project-layout.md` |
