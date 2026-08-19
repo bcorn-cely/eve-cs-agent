@@ -1,8 +1,10 @@
 # Northwind CS Agent
 
-A complete, runnable sample agent built with [**eve**](https://eve.dev/docs), Vercel's filesystem-first framework for durable backend agents.
+A complete, runnable reference agent built with [**eve**](https://eve.dev/docs), Vercel's filesystem-first framework for durable backend agents.
 
-This project is a hands-on learning resource. Rather than a "hello world," it is a realistic customer-support agent that exercises the core building blocks you will use in your own eve apps: instructions, tools, skills, connections, hooks, a sandbox, a channel, a subagent, and evals. Each concept lives in its own file, so you can read one file to understand one idea.
+This repository is the starter you take home from a hands-on workshop that introduces developers and builders to eve. Rather than a "hello world," it is a realistic customer-support agent that exercises the core building blocks you'll use in your own eve apps: instructions, tools, skills, connections, hooks, a sandbox, a channel, a subagent, and evals. Each concept lives in its own file, so you can read one file to understand one idea.
+
+It is meant to be read, run, and taken apart. Clone it, talk to the agent, change something, watch what happens, then use it as the skeleton for an agent of your own. The Northwind billing scenario is fictional and exists only to give every eve primitive a realistic job to do; the point you're meant to walk away with is the framework, not the domain.
 
 ## The scenario
 
@@ -58,7 +60,7 @@ AI_GATEWAY_API_KEY=your_gateway_key
 # ...or run `vercel link` to populate VERCEL_OIDC_TOKEN instead
 
 # Access to the Northwind mock billing API
-NORTHWIND_BILLING_API_TOKEN=your_token
+NORTHWIND_BILLING_API_TOKEN=testtoken
 ```
 
 `.env.local` is git-ignored, so your keys never get committed. If a credential is missing, the dev interface will flag it and its `/model` command can walk you through adding a model key.
@@ -92,11 +94,25 @@ Open `evals/refund/over-500.eval.ts` to see how a test sends a message, asserts 
 
 ### Other useful commands
 
+These npm scripts wrap the most common eve commands:
+
 ```bash
-npm run typecheck   # type-check the project
-npm run build       # compile the agent into .eve/ and build the host output
-npm start           # serve the built output
+npm run typecheck   # tsc: type-check the project
+npm run build       # eve build: compile to .eve/ and build the host output
+npm start           # eve start: serve the built output
 ```
+
+For the rest of the toolchain, call the `eve` binary directly with `npx eve <command>`. The ones you'll reach for most:
+
+| Command | What it does |
+|---|---|
+| `npx eve info` | Prints everything eve discovered from the filesystem: tools, skills, subagents, channels, routes, and discovery diagnostics. Run it first whenever the agent behaves unexpectedly; it confirms a file was picked up without booting the dev server. |
+| `npx eve dev` | Starts the local dev server and interactive terminal UI (what `npm run dev` runs). Pass a URL, e.g. `npx eve dev https://your-app.vercel.app`, to point the UI at a deployed instance instead of a local one. |
+| `npx eve eval` | Runs the eval suites under `evals/`, against the local app or a remote `--url`. |
+| `npx eve link` | Links the directory to a Vercel project and pulls an AI Gateway credential into `.env.local`, an alternative to setting `AI_GATEWAY_API_KEY` by hand. |
+| `npx eve deploy` | Deploys the agent to Vercel production, linking first if needed. This is how you take it from a local REPL to a live URL. |
+
+A good working loop: edit files under `agent/`, run `eve info` to confirm discovery, iterate with `eve dev`, then `eve build` and `eve deploy` when you're ready to ship.
 
 You can also point the CLI at a running instance over HTTP. Every eve app exposes a stable session API:
 
@@ -128,12 +144,38 @@ AGENTS.md                   # notes for coding assistants working in this repo
 
 ## Suggested explorations
 
-Once you have it running, try changing something and watching the effect:
+The agent is a starting point. The fastest way to learn eve is to change one thing, run it, and watch the behavior move.
 
-- **Tighten a guardrail.** Lower the refund approval threshold in `agent/tools/issue_refund.ts` and re-run the refund conversation.
-- **Add a rule.** Extend `agent/instructions.md` or the `refund-policy` skill and see how behavior shifts.
-- **Add a tool.** Create a new file in `agent/tools/`; the filename becomes the tool name the model sees.
-- **Write an eval.** Copy one of the files in `evals/` to lock in a behavior you care about, then run the suite.
+**Warm-ups**
+
+- **Tighten a guardrail.** Lower the approval threshold in `agent/tools/issue_refund.ts` and re-run the large-refund conversation.
+- **Add a rule or a tool.** Extend `agent/instructions.md` (or the `refund-policy` skill), or drop a new file in `agent/tools/`; the filename becomes the tool name the model sees.
+- **Lock a behavior in.** Copy a file in `evals/` to pin a behavior you care about, then run `npx eve eval`.
+
+**Go further**
+
+These reach for eve's more advanced primitives, and each one maps to a question builders actually ask after seeing eve for the first time. Each references the matching doc under `node_modules/eve/docs/`.
+
+- **Wire it to your own backend.** The most common question: "how do I make this part of my existing service?" The pattern is already in this repo. Swap the OpenAPI spec URL in `agent/connections/billing-records.ts` for your own API's spec (or an MCP server), and the agent calls your systems instead of Northwind's mock. Your existing backend can call the agent back through its HTTPS channel like any other internal API. (`connections/`, `guides/remote-agents.md`)
+  *Try:* change `spec` and `baseUrl` in `billing-records.ts` to your API, set its `auth`, then run `npx eve info` to see the new tools appear.
+- **Lock down the front door.** The channel currently ends in a `none()` placeholder. Replace it with your real auth provider so the channel establishes who is calling, then use that identity to decide what the caller can do. Auth in eve has three deliberate seams: channel auth (who can call the agent), connection auth (what identity the agent uses when calling other systems), and approval (what pauses for a human). This repo demonstrates all three. (`guides/auth-and-route-protection.md`)
+  *Try:* in `agent/channels/eve.ts`, swap `none()` for `httpBasic()`, then log `ctx.session.auth` from a tool to see the caller's identity arrive.
+- **Serve a different playbook per caller.** Once callers have identities, make the `refund-policy` skill dynamic: wrap it in `defineDynamic` + `defineSkill` keyed on `ctx.session.auth`, so an enterprise caller loads a stricter escalation playbook than a starter one, and nobody else ever sees it. The same mechanism works for tools and instructions. (`guides/dynamic-capabilities.md`)
+  *Try:* add `agent/skills/tier_playbook.ts` exporting `defineDynamic` with a `"session.started"` resolver that reads the caller and returns a `defineSkill({ markdown })`, or `null`.
+- **Give it durable memory.** Use `defineState` (`eve/context`) to track something across turns, like a running total of refunds this session, and have `issue_refund` refuse once the session crosses a cap. The agent already accumulates totals in `agent/lib/audit.ts`, so this is a short step from what's there. (`guides/state.md`)
+  *Try:* declare `defineState("cs.refunds", () => ({ total: 0 }))` in `agent/lib/`, then `get()` and `update()` it inside `issue_refund`'s `execute`.
+- **Swap the model, then prove which is better.** The model is one string in `agent/agent.ts`, and eve runs on the AI SDK, so you are not locked to one provider. Change it, then run the same eval suite against each candidate with `npx eve eval` and diff the score reports. That is a model bake-off with the tests you already have. (`agent-config.md`, `evals/`)
+  *Try:* `npx eve eval --json > run-a.json`, change the model string, run again, diff the two files.
+- **Make it proactive.** Add a `defineSchedule` under `agent/schedules/` that runs a nightly sweep, such as re-checking open escalations and posting a digest, so the agent starts itself on a cron cadence instead of waiting for a message. (`schedules.mdx`)
+  *Try:* create `agent/schedules/sweep.md` with `cron: "0 6 * * *"` frontmatter and the prompt as the body; in dev, fire it once with `curl -X POST localhost:3000/eve/v1/dev/schedules/sweep`.
+- **Let it get sharper over time.** The most-asked question after every session: "how do I build an agent that improves itself?" The safe shape: keep the agent's knowledge in markdown (instructions and skills are already files, so they can live in git like a reviewable brain), have a hook record every miss (an escalation, an "I can't verify that") into durable state, summarize the recurring ones on a schedule, and fold them back into instructions, a skill, or a new eval. A subagent can even draft that change as a PR. The loop is capture, review, encode, with a human merging, not the agent rewriting its own prompt unsupervised. (`guides/state.md`, `schedules.mdx`, `evals/`)
+  *Try:* copy `compliance_logger.ts` into a `miss_logger.ts` hook that appends escalations to a `defineState` list, add a weekly schedule whose prompt is "summarize this session's recorded misses and propose an edit to instructions.md", and review what it suggests.
+- **Add another specialist.** The root agent already delegates invoice analysis to the `billing_investigator` subagent. Add a second one, say a read-only `compliance_auditor`, with its own tools and instructions, and watch the router pick it. This is eve's orchestration story: a top-level agent composing scoped, auditable specialists rather than one giant agent doing everything. (`subagents.mdx`)
+  *Try:* copy `agent/subagents/billing_investigator/` to a new folder, rewrite its `instructions.md` and tools, run `npx eve info` to confirm discovery, then ask the root agent an audit question.
+- **Make its behavior visible.** `agent/hooks/compliance_logger.ts` already observes refunds. Extend it to emit structured events for tool calls, approvals, and session boundaries to whatever observability stack you run (OpenTelemetry is a natural fit), so you can audit what the agent did and why, in your own UI. (`guides/instrumentation.md`, `guides/hooks.md`)
+  *Try:* in `compliance_logger.ts`, drop the `toolResultFrom` filter so `"action.result"` logs every tool call as one JSON line, then point those lines at your log pipeline.
+
+Taking this toward real, multi-tenant traffic? Eve is tenant-agnostic infrastructure, so tenancy is yours to design, and the `patterns/` docs (`multi-tenant-auth`, `multi-tenant-approvals`, `multi-tenant-memory`) show per-tenant auth, approval thresholds, and memory.
 
 ## Learn more
 
