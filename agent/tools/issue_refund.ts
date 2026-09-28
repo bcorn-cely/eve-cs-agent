@@ -3,7 +3,6 @@ import { z } from "zod";
 import { apiFetch, ApiError } from "#lib/api.js";
 import { auditState } from "#lib/audit.js";
 import type { Invoice } from "#lib/types.js";
-import { always } from "eve/tools/approval";
 
 interface RefundResponse {
   refundId: string;
