@@ -26,7 +26,7 @@ Every eve capability is a file (or a folder) under `agent/`. Here is the map fro
 | **Human-in-the-loop approval** | `agent/tools/issue_refund.ts` | A tool that pauses for human approval when a refund exceeds $500, and runs automatically below it. |
 | **Skills** | `agent/skills/refund-policy/` | A procedure the agent loads on demand, only when it is about to touch a refund, keeping the base prompt lean. |
 | **Connections** | `agent/connections/billing-records.ts` | An external OpenAPI integration wired in with auth and an approval policy. |
-| **Hooks** | `agent/hooks/compliance_logger.ts` | Code that reacts to runtime events (here: log every completed refund for compliance). |
+| **Hooks** | `agent/hooks/compliance_logger.ts` | Code that reacts to runtime events (here: send session, message, and turn activity to a simulated analytics warehouse). |
 | **Sandbox** | `agent/sandbox/sandbox.ts` | A per-agent execution sandbox with a network allow-list. |
 | **Channel** | `agent/channels/eve.ts` | The HTTP entry point and its auth configuration. |
 | **Subagent** | `agent/subagents/billing_investigator/` | A specialist child agent the main agent delegates deep invoice analysis to. |
@@ -133,7 +133,7 @@ agent/
   tools/                    # typed capabilities the model can call
   skills/                   # on-demand procedures (refund policy)
   connections/              # external OpenAPI integrations
-  hooks/                    # event-driven side effects (compliance logging)
+  hooks/                    # event-driven side effects (session analytics)
   sandbox/                  # sandbox + network policy
   channels/                 # HTTP entry point + auth
   subagents/                # specialist child agents
@@ -158,8 +158,8 @@ These reach for eve's more advanced primitives, and each one maps to a question 
 
 - **Wire it to your own backend.** The most common question: "how do I make this part of my existing service?" The pattern is already in this repo. Swap the OpenAPI spec URL in `agent/connections/billing-records.ts` for your own API's spec (or an MCP server), and the agent calls your systems instead of Northwind's mock. Your existing backend can call the agent back through its HTTPS channel like any other internal API. (`connections/`, `guides/remote-agents.md`)
   *Try:* change `spec` and `baseUrl` in `billing-records.ts` to your API, set its `auth`, then run `npx eve info` to see the new tools appear.
-- **Lock down the front door.** The channel currently ends in a `none()` placeholder. Replace it with your real auth provider so the channel establishes who is calling, then use that identity to decide what the caller can do. Auth in eve has three deliberate seams: channel auth (who can call the agent), connection auth (what identity the agent uses when calling other systems), and approval (what pauses for a human). This repo demonstrates all three. (`guides/auth-and-route-protection.md`)
-  *Try:* in `agent/channels/eve.ts`, swap `none()` for `httpBasic()`, then log `ctx.session.auth` from a tool to see the caller's identity arrive.
+- **Lock down the front door.** The channel currently ends in `placeholderAuth()`, which fails closed in production. Replace it with your real auth provider so the channel establishes who is calling, then use that identity to decide what the caller can do. Auth in eve has three deliberate seams: channel auth (who can call the agent), connection auth (what identity the agent uses when calling other systems), and approval (what pauses for a human). This repo demonstrates all three. (`guides/auth-and-route-protection.md`)
+  *Try:* in `agent/channels/eve.ts`, swap `placeholderAuth()` for `httpBasic()`, then log `ctx.session.auth` from a tool to see the caller's identity arrive.
 - **Serve a different playbook per caller.** Once callers have identities, make the `refund-policy` skill dynamic: wrap it in `defineDynamic` + `defineSkill` keyed on `ctx.session.auth`, so an enterprise caller loads a stricter escalation playbook than a starter one, and nobody else ever sees it. The same mechanism works for tools and instructions. (`guides/dynamic-capabilities.md`)
   *Try:* add `agent/skills/tier_playbook.ts` exporting `defineDynamic` with a `"session.started"` resolver that reads the caller and returns a `defineSkill({ markdown })`, or `null`.
 - **Give it durable memory.** Use `defineState` (`eve/context`) to track something across turns, like a running total of refunds this session, and have `issue_refund` refuse once the session crosses a cap. The agent already accumulates totals in `agent/lib/audit.ts`, so this is a short step from what's there. (`guides/state.md`)
@@ -169,11 +169,11 @@ These reach for eve's more advanced primitives, and each one maps to a question 
 - **Make it proactive.** Add a `defineSchedule` under `agent/schedules/` that runs a nightly sweep, such as re-checking open escalations and posting a digest, so the agent starts itself on a cron cadence instead of waiting for a message. (`schedules.mdx`)
   *Try:* create `agent/schedules/sweep.md` with `cron: "0 6 * * *"` frontmatter and the prompt as the body; in dev, fire it once with `curl -X POST localhost:3000/eve/v1/dev/schedules/sweep`.
 - **Let it get sharper over time.** The most-asked question after every session: "how do I build an agent that improves itself?" The safe shape: keep the agent's knowledge in markdown (instructions and skills are already files, so they can live in git like a reviewable brain), have a hook record every miss (an escalation, an "I can't verify that") into durable state, summarize the recurring ones on a schedule, and fold them back into instructions, a skill, or a new eval. A subagent can even draft that change as a PR. The loop is capture, review, encode, with a human merging, not the agent rewriting its own prompt unsupervised. (`guides/state.md`, `schedules.mdx`, `evals/`)
-  *Try:* copy `compliance_logger.ts` into a `miss_logger.ts` hook that appends escalations to a `defineState` list, add a weekly schedule whose prompt is "summarize this session's recorded misses and propose an edit to instructions.md", and review what it suggests.
+  *Try:* add a `miss_logger.ts` hook that listens for `"action.result"` and appends escalations to a `defineState` list, add a weekly schedule whose prompt is "summarize this session's recorded misses and propose an edit to instructions.md", and review what it suggests.
 - **Add another specialist.** The root agent already delegates invoice analysis to the `billing_investigator` subagent. Add a second one, say a read-only `compliance_auditor`, with its own tools and instructions, and watch the router pick it. This is eve's orchestration story: a top-level agent composing scoped, auditable specialists rather than one giant agent doing everything. (`subagents.mdx`)
   *Try:* copy `agent/subagents/billing_investigator/` to a new folder, rewrite its `instructions.md` and tools, run `npx eve info` to confirm discovery, then ask the root agent an audit question.
-- **Make its behavior visible.** `agent/hooks/compliance_logger.ts` already observes refunds. Extend it to emit structured events for tool calls, approvals, and session boundaries to whatever observability stack you run (OpenTelemetry is a natural fit), so you can audit what the agent did and why, in your own UI. (`guides/instrumentation.md`, `guides/hooks.md`)
-  *Try:* in `compliance_logger.ts`, drop the `toolResultFrom` filter so `"action.result"` logs every tool call as one JSON line, then point those lines at your log pipeline.
+- **Make its behavior visible.** `agent/hooks/compliance_logger.ts` already records session boundaries, messages, and turns. Extend it to emit structured events for tool calls and approvals to whatever observability stack you run (OpenTelemetry is a natural fit), so you can audit what the agent did and why, in your own UI. (`guides/instrumentation.md`, `guides/hooks.md`)
+  *Try:* in `compliance_logger.ts`, add an `"action.result"` handler that logs every tool call as one JSON line, then replace `sendToWarehouse` with a call to your log pipeline.
 
 Taking this toward real, multi-tenant traffic? Eve is tenant-agnostic infrastructure, so tenancy is yours to design, and the `patterns/` docs (`multi-tenant-auth`, `multi-tenant-approvals`, `multi-tenant-memory`) show per-tenant auth, approval thresholds, and memory.
 
