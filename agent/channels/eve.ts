@@ -1,15 +1,15 @@
 import { eveChannel } from "eve/channels/eve";
-import { localDev, none, vercelOidc } from "eve/channels/auth";
+import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
 
+// Mounts the /eve/v1/session* routes. Auth strategies run in order; the first match wins.
 export default eveChannel({
   auth: [
-    // Lets the eve TUI and your Vercel deployments reach the deployed agent.
-    vercelOidc(),
     // Open on localhost for `eve dev` and the REPL; ignored in production.
     localDev(),
-    // This placeholder will not allow browser requests in production.
-    // Replace it with your app's auth provider, like Auth.js or Clerk,
-    // or use none() for a public demo.
-    none(),
+    // Lets the eve TUI and your Vercel deployments reach the deployed agent.
+    vercelOidc(),
+    // Fails closed in production. Swap in your real auth (Clerk, Auth.js, or
+    // your own OIDC/JWT/API-key verifier) before real traffic.
+    placeholderAuth(),
   ],
 });
